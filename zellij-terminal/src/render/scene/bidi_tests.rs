@@ -182,3 +182,32 @@ fn a_row_without_right_to_left_text_is_drawn_the_same_with_bidi_on_or_off() {
         "a row without right-to-left text is drawn the same either way"
     );
 }
+
+#[test]
+fn a_hebrew_letter_before_a_space_stays_in_its_own_cell() {
+    let state = Painter::state(1, 12, |painter| painter.text(0, 0, "בוקר טוב abc"));
+    let mut cache = GlyphCache::new(
+        FontStack::build(&FontOptions {
+            bidi: BidiMode::Ltr,
+            ..FontOptions::default()
+        })
+        .unwrap(),
+    );
+    let width = cache.metrics().width as i32;
+    let scene = scene_of(&state, &mut cache);
+    let mut cells: Vec<i32> = Vec::new();
+    for quad in &scene.glyphs {
+        let centre = 2 * quad.x + quad.entry.width as i32;
+        let cell = centre.div_euclid(2 * width);
+        let off_centre = (centre - (2 * cell + 1) * width).abs();
+        assert!(
+            off_centre <= width / 2,
+            "the glyph at {} sits off the centre of its cell: {:?}",
+            quad.x,
+            quad.entry
+        );
+        cells.push(cell);
+    }
+    cells.sort();
+    assert!(cells.windows(2).all(|pair| pair[0] != pair[1]), "{cells:?}");
+}

@@ -1401,9 +1401,11 @@ fn nothing_spreads_past_the_last_column_or_into_a_neighbour_with_text() {
             .collect();
         spill_room(&cells, state.geometry(), 0, col)
     };
-    assert_eq!(spill("ab ", 0), 0);
-    assert_eq!(spill("a  ", 0), 1);
+    assert_eq!(spill("\u{3012}b ", 0), 0);
+    assert_eq!(spill("\u{3012}  ", 0), 1);
     assert_eq!(spill("ab ", 2), 0);
+    assert_eq!(spill("a  ", 0), 0);
+    assert_eq!(spill("\u{5d8}  ", 0), 0);
 }
 
 #[test]

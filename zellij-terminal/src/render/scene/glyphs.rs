@@ -60,7 +60,11 @@ pub(super) fn spill_room(
     let Some(next) = cells.get(col + 1) else {
         return 0;
     };
+    // Only a symbol may spread into the blank beside it. A letter is part of
+    // a word, and centring it across two cells pushes it away from the
+    // letters on one side and into the letters on the other.
     let spreads = cells[col].occupancy == Occupancy::Single
+        && !cells[col].cell.character().is_alphabetic()
         && next.occupancy == Occupancy::Single
         && !next.composing
         && !next.held
