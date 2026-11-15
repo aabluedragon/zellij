@@ -23,6 +23,7 @@ pub(super) fn run_key(
         || entry.composing
         || entry.held
         || entry.complex
+        || entry.rtl
     {
         return None;
     }

@@ -8,6 +8,7 @@ use swash::shape::ShapeContext;
 use swash::text::{Codepoint, Script};
 use swash::FontRef;
 
+use crate::text::bidi::BidiMode;
 use crate::text::discovery::Discovery;
 
 pub use swash::GlyphId;
@@ -273,6 +274,8 @@ pub struct FontOptions {
     pub weight: u16,
     pub features: Vec<FontFeature>,
     pub cell: CellAdjust,
+    /// How right-to-left text is laid out.
+    pub bidi: BidiMode,
 }
 
 impl FontOptions {
@@ -300,6 +303,7 @@ impl Default for FontOptions {
             weight: DEFAULT_FONT_WEIGHT,
             features: Vec::new(),
             cell: CellAdjust::default(),
+            bidi: BidiMode::default(),
         }
     }
 }
@@ -391,6 +395,7 @@ pub struct FontStack {
     weight: u16,
     features: Vec<FontFeature>,
     shapes: bool,
+    bidi: BidiMode,
     metrics: CellMetrics,
     placement: CellPlacement,
     context: ScaleContext,
@@ -459,6 +464,7 @@ impl FontStack {
             size,
             weight: options.weight,
             shapes: options.ligatures || !features.is_empty(),
+            bidi: options.bidi,
             features,
             metrics,
             placement,
@@ -509,6 +515,10 @@ impl FontStack {
 
     pub fn shapes_runs(&self) -> bool {
         self.shapes
+    }
+
+    pub fn bidi(&self) -> BidiMode {
+        self.bidi
     }
 
     fn request(&self, style: FaceStyle) -> FaceRequest {

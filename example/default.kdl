@@ -738,6 +738,17 @@ web_client {
 //     // lacks
 //     system_fonts true
 //
+//     // How right-to-left text (Hebrew, Arabic and the like) is laid out. Text
+//     // is always kept in the order it was written; this only decides the
+//     // order it is drawn in, pane by pane and line by line.
+//     //   - "ltr" (default): right-to-left words are put in reading order where
+//     //     they stand, and lines still start at the left
+//     //   - "auto": a line starting with right-to-left text is laid out from
+//     //     the right edge of its pane
+//     //   - "rtl": every line is laid out from the right edge of its pane
+//     //   - "off": nothing is reordered
+//     bidi "ltr"
+//
 //     // Whether the font's ligatures are formed, so that sequences like -> or
 //     // != are drawn as one shape.
 //     ligatures true

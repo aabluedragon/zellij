@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Result};
 
 use crate::render::sprites;
+use crate::text::bidi::BidiMode;
 use crate::text::font::{
     CellMetrics, ClusterRaster, FaceStyle, FontId, FontStack, Glyph, GlyphBitmap, GlyphContent,
     GlyphId, ShapedGlyph,
@@ -402,6 +403,10 @@ impl GlyphCache {
 
     pub fn shapes_runs(&self) -> bool {
         self.fonts.shapes_runs()
+    }
+
+    pub fn bidi(&self) -> BidiMode {
+        self.fonts.bidi()
     }
 
     pub fn primary_of(&self, style: FaceStyle) -> FontId {

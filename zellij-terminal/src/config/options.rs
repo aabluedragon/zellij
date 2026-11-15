@@ -104,6 +104,7 @@ pub fn resolve(settings: &Settings, mode: Option<HostTerminalThemeMode>) -> Opti
             size: points_to_pixels(section.font_size.unwrap_or(DEFAULT_FONT_POINTS)),
             system_fonts: section.system_fonts.unwrap_or(true),
             ligatures: section.ligatures.unwrap_or(DEFAULT_LIGATURES),
+            bidi: section.bidi.unwrap_or_default(),
             weight: section.font_weight.unwrap_or(DEFAULT_FONT_WEIGHT),
             features: section
                 .font_features

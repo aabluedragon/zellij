@@ -1382,6 +1382,8 @@ fn nothing_spreads_past_the_last_column_or_into_a_neighbour_with_text() {
                 let cell = state.screen().cell(0, col);
                 let occupancy = state.occupancy(0, col);
                 RowCell {
+                    source: col,
+                    rtl: false,
                     cell,
                     occupancy,
                     paint: paint_of(cell, occupancy, &paints, None),

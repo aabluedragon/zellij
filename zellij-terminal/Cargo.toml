@@ -29,6 +29,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sixel-tokenizer = { version = "0.1.0", default-features = false }
 swash = { workspace = true }
+unicode-bidi = { version = "0.3", default-features = false, features = ["std", "hardcoded-data"] }
 unicode-width = { workspace = true }
 winit = { workspace = true }
 futures-util = { version = "0.3", optional = true }

@@ -1,6 +1,7 @@
 use crate::render::renderer::Frame;
 use crate::render::retained::{self};
 use crate::render::scene::{self, BlinkPhase, Margins};
+use crate::text::bidi;
 use crate::window::border_rects;
 use crate::window::refresh_millihertz;
 use crate::window::scene::SceneInputs;
@@ -48,6 +49,7 @@ impl App {
 
     pub(in crate::window) fn follow_cursor_area(&mut self) {
         let (row, col) = self.state.cursor_position();
+        let col = bidi::visual_column(&self.state, self.options.font.bidi, row, col);
         let area = (
             self.origin.0 + (col as u32 * self.metrics.width) as i32,
             self.origin.1 + (row as u32 * self.metrics.height) as i32,

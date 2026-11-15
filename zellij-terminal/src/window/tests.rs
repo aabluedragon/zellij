@@ -4124,3 +4124,84 @@ mod scroll_momentum {
         assert_eq!(sent, expected);
     }
 }
+
+fn with_hebrew_on_screen(harness: &mut Harness) {
+    crate::testing::painter::Painter::apply(&mut harness.app.state, |painter| {
+        painter.text(0, 0, "ab שלום cd");
+    });
+}
+
+fn mouse_events(harness: Harness) -> Vec<zellij_utils::input::mouse::MouseEvent> {
+    harness
+        .actions()
+        .into_iter()
+        .map(|action| match action {
+            Action::MouseEvent { event } => event,
+            other => panic!("expected a mouse event, got {:?}", other),
+        })
+        .collect()
+}
+
+#[test]
+fn a_click_on_hebrew_is_reported_at_the_cell_holding_the_letter() {
+    let mut harness = Harness::new(2, true, "");
+    with_hebrew_on_screen(&mut harness);
+    let leftmost_drawn_letter = over_cell(&harness, 0, 3);
+    harness.app.on_cursor_moved(leftmost_drawn_letter);
+    harness
+        .app
+        .on_mouse_input(MouseButton::Left, ElementState::Pressed);
+    let events = mouse_events(harness);
+    assert_eq!(events[1].event_type, MouseEventType::Press);
+    assert_eq!(
+        events[1].position,
+        zellij_utils::position::Position::new(0, 6),
+        "the last letter of the word is the one drawn leftmost"
+    );
+}
+
+#[test]
+fn a_click_on_latin_beside_hebrew_is_reported_where_it_is() {
+    let mut harness = Harness::new(2, true, "");
+    with_hebrew_on_screen(&mut harness);
+    let latin = over_cell(&harness, 0, 8);
+    harness.app.on_cursor_moved(latin);
+    harness
+        .app
+        .on_mouse_input(MouseButton::Left, ElementState::Pressed);
+    assert_eq!(
+        mouse_events(harness)[1].position,
+        zellij_utils::position::Position::new(0, 8)
+    );
+}
+
+#[test]
+fn a_click_on_hebrew_is_reported_where_it_is_when_bidi_is_off() {
+    let mut options = test_options(true);
+    options.font.bidi = crate::text::bidi::BidiMode::Off;
+    let mut harness = Harness::with(2, options, "");
+    with_hebrew_on_screen(&mut harness);
+    let letter = over_cell(&harness, 0, 3);
+    harness.app.on_cursor_moved(letter);
+    harness
+        .app
+        .on_mouse_input(MouseButton::Left, ElementState::Pressed);
+    assert_eq!(
+        mouse_events(harness)[1].position,
+        zellij_utils::position::Position::new(0, 3)
+    );
+}
+
+#[test]
+fn a_drag_over_drawn_hebrew_copies_the_letters_as_they_were_written() {
+    let mut harness = Harness::new(1, true, "");
+    with_hebrew_on_screen(&mut harness);
+    shift_drag(&mut harness, (0, 6), (0, 3));
+    assert_eq!(
+        harness.app.mouse.selection,
+        Some(Selection::at(0, 3).extended_to(0, 6)),
+        "the drag runs from the first letter, drawn rightmost, to the last"
+    );
+    copy_key(&mut harness);
+    assert_eq!(harness.clipboard_text().as_deref(), Some("שלום"));
+}

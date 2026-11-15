@@ -15,6 +15,7 @@ use crate::emulation::terminal::TerminalState;
 use crate::input::composition::Preedit;
 use crate::input::links::LinkRun;
 use crate::render::atlas::{AtlasEntry, GlyphCache};
+use crate::text::bidi::{self, BidiCell, BidiMode, RowOrder};
 use crate::text::font::{CellMetrics, FaceStyle, FontId};
 use zellij_utils::input::terminal::OpacityMode;
 
@@ -126,7 +127,14 @@ impl Run {
     }
 }
 
+#[derive(Clone, Copy)]
 struct RowCell {
+    /// The column of the screen the cell is held at. Right-to-left text is
+    /// drawn in another order than it is held in, so this is not always the
+    /// column the cell is drawn at.
+    source: usize,
+    /// The cell is read right to left.
+    rtl: bool,
     cell: WireCell,
     occupancy: Occupancy,
     paint: CellPaint,
@@ -437,6 +445,7 @@ pub struct RowContext<'a> {
     cursor_visible: bool,
     cursor_breaks_runs: Option<(usize, usize)>,
     shaping: bool,
+    bidi: BidiMode,
     preedit: Option<PreeditOverlay>,
     transparent_background: bool,
     cursor_hollow: bool,
@@ -552,6 +561,7 @@ impl<'a> RowContext<'a> {
                 .cursor_is_visible()
                 .then_some((cursor_row, cursor_col)),
             shaping: cache.shapes_runs(),
+            bidi: cache.bidi(),
             preedit,
             transparent_background: false,
             cursor_hollow: cursor.hollow,
@@ -578,6 +588,9 @@ pub struct RowScratch {
     shaped: Vec<bool>,
     text: String,
     unit_text: String,
+    bidi_cells: Vec<BidiCell>,
+    order: RowOrder,
+    ordered: Vec<RowCell>,
 }
 
 pub fn build_row(
@@ -598,24 +611,38 @@ pub fn build_row(
         shaped,
         text,
         unit_text,
+        bidi_cells,
+        order,
+        ordered,
     } = scratch;
     let (state, paints, metrics) = (context.state, context.paints, context.metrics);
     let origin_y = (row as u32 * metrics.height) as i32;
 
+    let reorders = context.bidi != BidiMode::Off;
     row_paints.clear();
+    bidi_cells.clear();
     for col in 0..context.size.cols {
         let composed = context
             .preedit
             .as_ref()
             .and_then(|overlay| overlay.at(row, col));
         let (cell, occupancy, cluster) = match composed {
-            Some((cell, occupancy, cluster)) => (*cell, *occupancy, cluster.is_some()),
+            Some((cell, occupancy, cluster)) => (*cell, *occupancy, cluster.as_deref()),
             None => (
                 state.screen().cell(row, col),
                 state.occupancy(row, col),
-                state.screen().cluster_at(row, col).is_some(),
+                state.screen().cluster_at(row, col).map(|text| &**text),
             ),
         };
+        if reorders {
+            bidi_cells.push(BidiCell {
+                lead: cluster
+                    .and_then(|text| text.chars().next())
+                    .unwrap_or_else(|| cell.character()),
+                attached: occupancy == Occupancy::WideTail || cell.is_group_continuation(),
+            });
+        }
+        let cluster = cluster.is_some();
         let on_cursor =
             context.cursor_visible && context.cursor_row == row && context.cursor_col == col;
         let inverted_by_cursor =
@@ -651,6 +678,8 @@ pub fn build_row(
         }
 
         row_paints.push(RowCell {
+            source: col,
+            rtl: false,
             cell,
             occupancy,
             paint,
@@ -665,6 +694,23 @@ pub fn build_row(
             unit_end: 0,
         });
     }
+    if reorders && order.arrange(bidi_cells, state.geometry(), row, context.bidi) {
+        ordered.clear();
+        ordered.extend(order.columns().iter().map(|source| {
+            let mut entry = row_paints[*source];
+            if order.is_rtl(*source) {
+                entry.rtl = true;
+                if let Some(mirrored) = (!entry.cluster)
+                    .then(|| bidi::mirrored(entry.cell.character()))
+                    .flatten()
+                {
+                    entry.cell.ch = mirrored as u32;
+                }
+            }
+            entry
+        }));
+        std::mem::swap(row_paints, ordered);
+    }
     mark_units(row_paints);
 
     shaped.clear();
@@ -677,7 +723,7 @@ pub fn build_row(
                 &row_paints[col],
                 state.geometry(),
                 row,
-                col,
+                row_paints[col].source,
                 context.cursor_breaks_runs,
             ));
         }
@@ -705,6 +751,8 @@ pub fn build_row(
 
     for col in 0..context.size.cols {
         let RowCell {
+            source,
+            rtl,
             cell,
             paint,
             explicit_background,
@@ -763,7 +811,12 @@ pub fn build_row(
 
         push_decorations(out, context, cell, &paint, (origin_x, origin_y), inkless);
 
-        if !composing && !inkless && context.hovered_link.is_some_and(|run| run.covers(row, col)) {
+        if !composing
+            && !inkless
+            && context
+                .hovered_link
+                .is_some_and(|run| run.covers(row, source))
+        {
             push_hover_underline(
                 out,
                 &paint,
@@ -786,10 +839,10 @@ pub fn build_row(
             push_cursor(
                 out,
                 context.cursor_shape,
-                origin_x,
-                origin_y,
+                (origin_x, origin_y),
                 metrics,
                 paints.beam_cursor(),
+                rtl,
             );
         }
     }
@@ -837,3 +890,6 @@ mod tests;
 
 #[cfg(test)]
 mod ligature_tests;
+
+#[cfg(test)]
+mod bidi_tests;

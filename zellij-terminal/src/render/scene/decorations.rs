@@ -146,12 +146,19 @@ pub(super) fn push_hollow_cursor(
 pub(super) fn push_cursor(
     out: &mut RowScene,
     shape: CursorShape,
-    origin_x: i32,
-    origin_y: i32,
+    (origin_x, origin_y): (i32, i32),
     metrics: CellMetrics,
     color: Srgb,
+    rtl: bool,
 ) {
     let stroke = metrics.stroke.max(1);
+    // A beam stands before its character, which in right-to-left text is to
+    // the character's right.
+    let beam_x = if rtl {
+        origin_x + metrics.width.saturating_sub(stroke) as i32
+    } else {
+        origin_x
+    };
     match shape {
         CursorShape::Block | CursorShape::Default => {},
         CursorShape::Underline => out.rects.push(Rect {
@@ -162,7 +169,7 @@ pub(super) fn push_cursor(
             color,
         }),
         CursorShape::Beam => out.rects.push(Rect {
-            x: origin_x,
+            x: beam_x,
             y: origin_y,
             width: stroke,
             height: metrics.height,

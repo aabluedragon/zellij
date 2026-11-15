@@ -6,6 +6,7 @@ use crate::input::links::{self};
 use crate::input::momentum::{self, Touch};
 use crate::input::mouse::{self};
 use crate::render::retained::{self};
+use crate::text::bidi::{self};
 use crate::window::App;
 use std::time::Instant;
 use winit::event::{ElementState, MouseScrollDelta, TouchPhase};
@@ -106,8 +107,39 @@ impl App {
         true
     }
 
+    /// The cell of the screen under the pointer. Right-to-left text is drawn
+    /// in another order than the screen holds it in, so this is the cell
+    /// whose text shows there, not the one at that spot of the grid.
+    pub(in crate::window) fn pointed_cell(&self) -> Option<(u16, u16)> {
+        self.mouse
+            .pointer
+            .cell_if_inside(self.geometry.get())
+            .map(|cell| self.held_cell(cell))
+    }
+
+    /// The cell of the screen drawn at the cell `(x, y)` of the window.
+    pub(in crate::window) fn held_cell(&self, (x, y): (u16, u16)) -> (u16, u16) {
+        let held =
+            bidi::logical_column(&self.state, self.options.font.bidi, y as usize, x as usize);
+        (u16::try_from(held).unwrap_or(x), y)
+    }
+
+    /// `event` as the session is to hear of it: at the cell of the screen
+    /// drawn where the pointer is.
+    pub(in crate::window) fn held_event(&self, mut event: MouseEvent) -> MouseEvent {
+        let (Ok(row), Ok(col)) = (
+            u16::try_from(event.position.line.0),
+            u16::try_from(event.position.column.0),
+        ) else {
+            return event;
+        };
+        let (held, _) = self.held_cell((col, row));
+        event.position.column.0 = held as usize;
+        event
+    }
+
     pub(in crate::window) fn selection_cell(&self) -> Option<(usize, usize)> {
-        let (x, y) = self.mouse.pointer.cell_if_inside(self.geometry.get())?;
+        let (x, y) = self.pointed_cell()?;
         let size = self.state.size();
         Some((
             (y as usize).min(size.rows.saturating_sub(1)),
@@ -197,7 +229,7 @@ impl App {
         if button != winit::event::MouseButton::Left {
             return false;
         }
-        let cell = self.mouse.pointer.cell_if_inside(self.geometry.get());
+        let cell = self.pointed_cell();
         if state.is_pressed() {
             if self.refresh_hover() {
                 self.refresh_pointer();
@@ -233,10 +265,7 @@ impl App {
     }
 
     pub(in crate::window) fn pane_wants_mouse(&self) -> bool {
-        mouse::pane_takes_the_click(
-            self.mouse.pointer.cell_if_inside(self.geometry.get()),
-            self.state.geometry(),
-        )
+        mouse::pane_takes_the_click(self.pointed_cell(), self.state.geometry())
     }
 
     pub(in crate::window) fn refresh_hover(&mut self) -> bool {
@@ -257,7 +286,7 @@ impl App {
     }
 
     pub(in crate::window) fn pointer_shape(&self) -> CursorIcon {
-        let cell = self.mouse.pointer.cell_if_inside(self.geometry.get());
+        let cell = self.pointed_cell();
         let reachable = links::is_reachable(
             self.link_opening(),
             self.pane_wants_mouse(),
@@ -386,10 +415,7 @@ impl App {
     }
 
     pub(in crate::window) fn momentum_target(&self) -> Option<momentum::Target> {
-        momentum::target_at(
-            self.state.geometry(),
-            self.mouse.pointer.cell_if_inside(self.geometry.get()),
-        )
+        momentum::target_at(self.state.geometry(), self.pointed_cell())
     }
 
     pub(in crate::window) fn stop_momentum(&mut self) {
@@ -450,6 +476,7 @@ impl App {
 
     pub(in crate::window) fn point<I: IntoIterator<Item = MouseEvent>>(&mut self, events: I) {
         for event in events {
+            let event = self.held_event(event);
             if let Err(e) = self.tell(mouse::message(event)) {
                 report!("failed to send a mouse event: {}", e);
             }

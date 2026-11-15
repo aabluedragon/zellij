@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use zellij_utils::structured_render::{FrameBuilder, FrameView, WireCell};
+use zellij_utils::structured_render::{
+    FrameBuilder, FrameView, GeometryRecord, PaneRect, WireCell,
+};
 
 use crate::emulation::color::Contrast;
 use crate::emulation::terminal::TerminalState;
@@ -178,6 +180,17 @@ impl PaneAnimation {
         }
         let mut builder = FrameBuilder::new(self.grid_cols as u16, total as u16, 0);
         builder.set_full_repaint(true);
+        // The rows are the pane's, and are laid out within its width like the
+        // ones still on the screen: right-to-left text starts at its edge.
+        builder.push_geometry(&GeometryRecord {
+            panes: vec![PaneRect {
+                x: self.content.x as u16,
+                y: 0,
+                cols: self.content.cols as u16,
+                rows: total as u16,
+                ..PaneRect::default()
+            }],
+        });
         let mut positions = Vec::with_capacity(total);
         let mut index = 0u16;
         for (distance, cells) in self.above.iter().enumerate().rev() {

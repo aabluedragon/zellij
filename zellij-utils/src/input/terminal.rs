@@ -224,6 +224,58 @@ impl OpacityMode {
     }
 }
 
+/// How right-to-left text (Hebrew, Arabic and the like) is laid out. The
+/// screen always holds text in the order it was written; this decides the
+/// order it is drawn in.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BidiMode {
+    /// Text is drawn in the order it was written, with nothing reordered.
+    Off,
+    /// Right-to-left runs are reordered in place; lines stay left-to-right.
+    #[default]
+    Ltr,
+    /// Every line is right-to-left.
+    Rtl,
+    /// Each line takes the direction of its first strongly directional
+    /// character.
+    Auto,
+}
+
+impl BidiMode {
+    pub fn from_kdl(kdl: &KdlNode) -> Result<Self, ConfigError> {
+        let named = kdl
+            .entries()
+            .iter()
+            .next()
+            .and_then(|entry| entry.value().as_string());
+        match named.map(str::to_ascii_lowercase).as_deref() {
+            Some("off") => Ok(BidiMode::Off),
+            Some("ltr") => Ok(BidiMode::Ltr),
+            Some("rtl") => Ok(BidiMode::Rtl),
+            Some("auto") => Ok(BidiMode::Auto),
+            _ => Err(ConfigError::new_kdl_error(
+                "bidi must be \"off\", \"ltr\", \"rtl\" or \"auto\"".to_owned(),
+                kdl.span().offset(),
+                kdl.span().len(),
+            )),
+        }
+    }
+
+    pub fn to_kdl(&self) -> KdlNode {
+        let mut node = KdlNode::new("bidi");
+        node.push(KdlValue::String(
+            match self {
+                BidiMode::Off => "off",
+                BidiMode::Ltr => "ltr",
+                BidiMode::Rtl => "rtl",
+                BidiMode::Auto => "auto",
+            }
+            .to_owned(),
+        ));
+        node
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaddingColor {
     #[default]
@@ -514,6 +566,7 @@ pub struct TerminalConfig {
     pub copy_keys: Option<Vec<KeyWithModifier>>,
     pub reuse_session_windows: Option<bool>,
     pub allow_remote_clipboard_read: Option<bool>,
+    pub bidi: Option<BidiMode>,
 }
 
 impl TerminalConfig {
@@ -581,6 +634,9 @@ impl TerminalConfig {
         }
         if let Some(opacity_mode) = kdl_get_child!(kdl, "opacity_mode") {
             window.opacity_mode = Some(OpacityMode::from_kdl(opacity_mode)?);
+        }
+        if let Some(bidi) = kdl_get_child!(kdl, "bidi") {
+            window.bidi = Some(BidiMode::from_kdl(bidi)?);
         }
         if let Some(blur) = kdl_get_child_entry_bool_value!(kdl, "blur") {
             window.blur = Some(blur);
@@ -769,6 +825,9 @@ impl TerminalConfig {
         if let Some(opacity_mode) = self.opacity_mode {
             children.nodes_mut().push(opacity_mode.to_kdl());
         }
+        if let Some(bidi) = self.bidi {
+            children.nodes_mut().push(bidi.to_kdl());
+        }
         if let Some(blur) = self.blur {
             let mut blur_node = KdlNode::new("blur");
             blur_node.push(KdlValue::Bool(blur));
@@ -919,6 +978,7 @@ impl TerminalConfig {
         merged.terminal_requests = other.terminal_requests.or(merged.terminal_requests);
         merged.opacity = other.opacity.or(merged.opacity);
         merged.opacity_mode = other.opacity_mode.or(merged.opacity_mode);
+        merged.bidi = other.bidi.or(merged.bidi);
         merged.blur = other.blur.or(merged.blur);
         merged.macos_option_as_alt = other.macos_option_as_alt.or(merged.macos_option_as_alt);
         merged.theme = match (merged.theme, other.theme) {
@@ -1688,6 +1748,42 @@ mod tests {
         );
         assert!(section("terminal {\n opacity_mode\n}").is_err());
         assert_eq!(OpacityMode::default(), OpacityMode::Background);
+    }
+
+    #[test]
+    fn every_bidi_mode_is_named_and_an_unknown_one_lists_the_valid_ones() {
+        for (text, expected) in [
+            ("off", BidiMode::Off),
+            ("ltr", BidiMode::Ltr),
+            ("rtl", BidiMode::Rtl),
+            ("auto", BidiMode::Auto),
+            ("Auto", BidiMode::Auto),
+        ] {
+            let parsed = section(&format!("terminal {{\n bidi \"{}\"\n}}", text)).unwrap();
+            assert_eq!(parsed.bidi, Some(expected), "{}", text);
+            let written = parsed.to_kdl().expect("a set option is written out");
+            assert_eq!(
+                TerminalConfig::from_kdl(&written).unwrap().bidi,
+                Some(expected),
+                "{}",
+                text
+            );
+        }
+        let err = section("terminal {\n bidi \"sideways\"\n}").unwrap_err();
+        let message = format!("{:?}", err);
+        assert!(
+            message.contains("ltr") && message.contains("auto"),
+            "{}",
+            message
+        );
+        assert!(section("terminal {\n bidi\n}").is_err());
+        assert_eq!(section("terminal {\n}").unwrap().bidi, None);
+        assert_eq!(BidiMode::default(), BidiMode::Ltr);
+        let chosen = section("terminal {\n bidi \"rtl\"\n}").unwrap();
+        assert_eq!(
+            chosen.merge(TerminalConfig::default()).bidi,
+            Some(BidiMode::Rtl)
+        );
     }
 
     #[test]

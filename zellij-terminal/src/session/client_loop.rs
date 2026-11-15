@@ -403,7 +403,10 @@ impl<'a> Served<'a> {
         }
     }
 
-    fn settings_pushed(&mut self, pushed: Settings) {
+    fn settings_pushed(&mut self, mut pushed: Settings) {
+        // A session older than the option never names it, and what the
+        // configuration file says of it then still stands.
+        pushed.section.bidi = pushed.section.bidi.or(self.settings.section.bidi);
         if pushed != self.settings {
             self.settings = pushed;
             self.repaint();

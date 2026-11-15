@@ -85,7 +85,9 @@ fn uniform_cells(count: usize, character: char) -> Vec<RowCell> {
         ..WireCell::BLANK
     };
     (0..count)
-        .map(|_| RowCell {
+        .map(|col| RowCell {
+            source: col,
+            rtl: false,
             cell,
             occupancy: Occupancy::Single,
             paint: paint_of(cell, Occupancy::Single, &Paints::default(), None),

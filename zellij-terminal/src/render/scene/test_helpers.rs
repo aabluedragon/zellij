@@ -101,6 +101,8 @@ pub fn ligating_sequences(state: &TerminalState, cache: &mut GlyphCache) -> Vec<
                 let cell = state.screen().cell(row, col);
                 let occupancy = state.occupancy(row, col);
                 RowCell {
+                    source: col,
+                    rtl: false,
                     cell,
                     occupancy,
                     paint: paint_of(cell, occupancy, &paints, None),
